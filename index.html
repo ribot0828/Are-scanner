@@ -138,11 +138,39 @@
 
 <script>
 let scanning = false;
+let lastScanTime = 0;
+const COOLDOWN_MS = 3 * 60 * 1000;
+const BATCH_DELAY_MS = 2000;
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
 
 async function startScan() {
   if (scanning) return;
+
+  const now = Date.now();
+  const remaining = COOLDOWN_MS - (now - lastScanTime);
+  if (lastScanTime && remaining > 0) {
+    const mins = Math.ceil(remaining / 60000);
+    const secs = Math.ceil(remaining / 1000) % 60;
+    alert(`サーバー負荷軽減のため${mins}分${secs > 0 ? secs + '秒' : ''}後に再スキャンできます`);
+    return;
+  }
+
   const url = document.getElementById('urlInput').value.trim();
   if (!url) { alert('URLを入力してください'); return; }
+
+  if (!url.includes('sp.jra.jp')) {
+    alert('sp.jra.jp のURLを入力してください');
+    return;
+  }
 
   const minOdds = parseFloat(document.getElementById('minOdds').value) || 100;
   const maxMargin = parseFloat(document.getElementById('maxMargin').value) || 1.0;
@@ -190,6 +218,8 @@ async function startScan() {
       );
       const batchResults = await Promise.all(promises);
 
+      if (i + batchSize < urls.length) await sleep(BATCH_DELAY_MS);
+
       for (const race of batchResults) {
         completed++;
         const pct = Math.round((completed / urls.length) * 100);
@@ -210,7 +240,8 @@ async function startScan() {
     // Step 3: Display results
     progressArea.classList.add('hidden');
     summary.classList.remove('hidden');
-    summary.innerHTML = `${dateStr ? dateStr + ' | ' : ''}オッズ${minOdds}倍以上 × 同クラス近走${maxMargin}秒以内 | <span class="count">${results.length}頭</span>該当`;
+    lastScanTime = Date.now();
+    summary.innerHTML = `${esc(dateStr) ? esc(dateStr) + ' | ' : ''}オッズ${minOdds}倍以上 × 同クラス近走${maxMargin}秒以内 | <span class="count">${results.length}頭</span>該当`;
 
     resultTable.classList.remove('hidden');
     if (results.length === 0) {
@@ -220,15 +251,15 @@ async function startScan() {
         let pastHtml = '';
         for (const pr of (r.pastSameClass || [])) {
           if (pr.margin <= maxMargin) {
-            pastHtml += `<div class="past-race">${pr.race} ${pr.place} <span class="margin">${pr.margin}秒差</span></div>`;
+            pastHtml += `<div class="past-race">${esc(pr.race)} ${esc(pr.place)} <span class="margin">${pr.margin}秒差</span></div>`;
           }
         }
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td class="venue">${r.venue}${r.raceNum}</td>
-          <td>${r.raceName}<br><small class="meta">${r.grade} / ${r.course}</small></td>
+          <td class="venue">${esc(r.venue)}${esc(r.raceNum)}</td>
+          <td>${esc(r.raceName)}<br><small class="meta">${esc(r.grade)} / ${esc(r.course)}</small></td>
           <td class="umaban">${r.umaban}</td>
-          <td class="name">${r.name}</td>
+          <td class="name">${esc(r.name)}</td>
           <td class="odds">${r.odds}倍</td>
           <td class="best">${r.bestMargin}秒</td>
           <td>${pastHtml}</td>`;

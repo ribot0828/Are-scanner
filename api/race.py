@@ -8,6 +8,16 @@ import json
 
 UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 JRA_TRACKS = {"札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"}
+ALLOWED_HOST = "sp.jra.jp"
+
+
+def validate_jra_url(url):
+    parsed = urlparse(url)
+    if parsed.hostname != ALLOWED_HOST:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    return True
 
 
 def fetch_page(url):
@@ -210,12 +220,12 @@ class handler(BaseHTTPRequestHandler):
         params = parse_qs(urlparse(self.path).query)
         url = params.get("url", [""])[0]
 
-        if not url:
+        if not url or not validate_jra_url(url):
             self.send_response(400)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            self.wfile.write(json.dumps({"error": "url parameter required"}).encode())
+            self.wfile.write(json.dumps({"error": "sp.jra.jp のレースURLのみ対応しています"}).encode())
             return
 
         try:

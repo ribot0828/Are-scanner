@@ -7,6 +7,18 @@ import re
 import json
 
 UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+ALLOWED_HOST = "sp.jra.jp"
+
+
+def validate_jra_url(url):
+    parsed = urlparse(url)
+    if parsed.hostname != ALLOWED_HOST:
+        return None
+    if parsed.scheme not in ("http", "https"):
+        return None
+    if "accessD" not in parsed.path and "CNAME" not in (parsed.query or ""):
+        return None
+    return url
 
 
 def fetch_page(url):
@@ -30,6 +42,8 @@ def collect_all_race_urls(seed_url):
     all_race_urls = set()
 
     for link in venue_links:
+        if not validate_jra_url(link):
+            continue
         m = re.search(r"sw01ddd(\d{4})", link)
         if m:
             vc = m.group(1)
@@ -55,12 +69,12 @@ class handler(BaseHTTPRequestHandler):
         params = parse_qs(urlparse(self.path).query)
         url = params.get("url", [""])[0]
 
-        if not url or "jra" not in url.lower():
+        if not url or not validate_jra_url(url):
             self.send_response(400)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            self.wfile.write(json.dumps({"error": "JRAのレースURLを指定してください"}).encode())
+            self.wfile.write(json.dumps({"error": "sp.jra.jp のレースURLのみ対応しています"}).encode())
             return
 
         try:
