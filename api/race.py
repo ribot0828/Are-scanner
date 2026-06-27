@@ -6,27 +6,36 @@ from bs4 import BeautifulSoup
 import re
 import json
 
-UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 JRA_TRACKS = {"札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"}
-ALLOWED_HOSTS = {"sp.jra.jp", "www.jra.go.jp"}
+JRA_HOSTS = {"sp.jra.jp", "www.jra.go.jp"}
+NETKEIBA_HOSTS = {"race.netkeiba.com", "race.sp.netkeiba.com"}
 
 
-def normalize_to_sp(url):
-    return url.replace("www.jra.go.jp", "sp.jra.jp")
-
-
-def validate_jra_url(url):
+def classify_url(url):
     parsed = urlparse(url)
-    if parsed.hostname not in ALLOWED_HOSTS:
-        return None
+    host = parsed.hostname or ""
     if parsed.scheme not in ("http", "https"):
-        return None
-    return normalize_to_sp(url)
+        return None, None
+    if host in JRA_HOSTS:
+        return "jra", url.replace("www.jra.go.jp", "sp.jra.jp")
+    if host in NETKEIBA_HOSTS:
+        nk = url.replace("race.sp.netkeiba.com", "race.netkeiba.com")
+        nk = nk.replace("/shutuba.html", "/shutuba_past.html")
+        if "shutuba_past" not in nk and "race_id=" in nk:
+            nk = re.sub(r"/race/[^?]+", "/race/shutuba_past.html", nk)
+        return "netkeiba", nk
+    return None, None
 
 
 def fetch_page(url):
     res = requests.get(url, headers={"User-Agent": UA}, timeout=15)
     return BeautifulSoup(res.content.decode("cp932", errors="replace"), "html.parser")
+
+
+def fetch_page_utf8(url):
+    res = requests.get(url, headers={"User-Agent": UA}, timeout=15)
+    return BeautifulSoup(res.content.decode("utf-8", errors="replace"), "html.parser")
 
 
 def normalize_class(c):
@@ -278,22 +287,254 @@ def scrape_race(url):
     }
 
 
+def scrape_race_netkeiba(url):
+    soup = fetch_page_utf8(url)
+
+    rn_el = soup.find("h1", class_="RaceName")
+    race_name = rn_el.get_text().strip() if rn_el else ""
+    if not race_name:
+        return None
+
+    race_num = ""
+    rn_span = soup.find("span", class_="RaceNum")
+    if rn_span:
+        nm = re.search(r"(\d+)\s*R", rn_span.get_text())
+        if nm:
+            race_num = nm.group(1) + "R"
+
+    course_info = ""
+    cur_surface = ""
+    cur_dist = 0
+    rd01 = soup.find("div", class_="RaceData01")
+    if rd01:
+        rd01_text = re.sub(r"\s+", " ", rd01.get_text()).strip()
+        cm = re.search(r"(ダ|芝)(\d+)m", rd01_text)
+        if cm:
+            cur_surface = "ダ" if cm.group(1) == "ダ" else "芝"
+            cur_dist = int(cm.group(2))
+        dir_m = re.search(r"\(([^)]+)\)", rd01_text)
+        if cm and dir_m:
+            course_info = f"{cur_dist}m {cur_surface}・{dir_m.group(1)}"
+        elif cm:
+            course_info = f"{cur_dist}m {cur_surface}"
+
+    venue = ""
+    grade_info = ""
+    date_info = ""
+    rd02 = soup.find("div", class_="RaceData02")
+    if rd02:
+        for sp in rd02.find_all("span"):
+            t = sp.get_text().strip()
+            if t in JRA_TRACKS:
+                venue = t
+            gm = re.search(r"([１-３1-3]勝クラス|未勝利|新馬|OP|オープン)", t)
+            if gm and not grade_info:
+                grade_info = gm.group(1).translate(str.maketrans("１２３", "123"))
+
+    if not grade_info:
+        gp = r"(GⅠ|GⅡ|GⅢ|G[1-3]|Jpn[1-3]|OP|オープン|[1-3]勝クラス|未勝利|新馬)"
+        for src in [race_name, rd02.get_text() if rd02 else ""]:
+            gm = re.search(gp, src)
+            if gm:
+                grade_info = gm.group(1)
+                grade_info = grade_info.replace("Ⅰ", "1").replace("Ⅱ", "2").replace("Ⅲ", "3").replace("オープン", "OP")
+                break
+    if not grade_info:
+        grade_info = "一般"
+
+    title_el = soup.find("title")
+    if title_el:
+        dm = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日", title_el.get_text())
+        if dm:
+            date_info = f"{dm.group(1)}-{dm.group(2).zfill(2)}-{dm.group(3).zfill(2)}"
+
+    current_cls = normalize_class(grade_info)
+
+    horses = []
+    seen = set()
+    tbl = soup.find("table", id="sort_table")
+    if not tbl:
+        tbl = soup.find("table", class_="Shutuba_Past5_Table")
+    if not tbl:
+        return None
+
+    for row in tbl.find_all("tr", class_="HorseList"):
+        try:
+            tr_id = row.get("id", "")
+            um = re.search(r"tr_(\d+)", tr_id)
+            if not um:
+                continue
+            umaban = int(um.group(1))
+
+            horse_info = row.find("td", class_="Horse_Info")
+            name = "不明"
+            if horse_info:
+                h02 = horse_info.find("div", class_="Horse02")
+                if h02:
+                    a = h02.find("a")
+                    if a:
+                        name = a.get_text().strip()
+
+            odds = 0.0
+            if horse_info:
+                pop = horse_info.find("div", class_="Popular")
+                if pop:
+                    odds_span = pop.find("span", id=lambda x: x and x.startswith("odds-"))
+                    if odds_span:
+                        try:
+                            odds = float(odds_span.get_text().strip().replace(",", ""))
+                        except ValueError:
+                            pass
+
+            if umaban in seen:
+                continue
+            seen.add(umaban)
+            horse = {"umaban": umaban, "name": name, "odds": odds}
+            horses.append(horse)
+
+            qualifying_races = []
+            all_past = []
+            for cell in row.find_all("td", class_="Past"):
+                data_item = cell.find("div", class_="Data_Item")
+                if not data_item:
+                    continue
+
+                data01 = data_item.find("div", class_="Data01")
+                if not data01:
+                    continue
+
+                rc_text = ""
+                first_span = data01.find("span", class_=lambda c: c != "Num" if c else True)
+                if first_span:
+                    parts = re.split(r"[\s\xa0]+", first_span.get_text().strip())
+                    if len(parts) >= 2:
+                        rc_text = parts[-1]
+
+                past_place = 0
+                num_span = data01.find("span", class_="Num")
+                if num_span:
+                    pm = re.search(r"(\d+)", num_span.get_text())
+                    if pm:
+                        past_place = int(pm.group(1))
+
+                is_jra = any(t in rc_text for t in JRA_TRACKS)
+
+                data02 = data_item.find("div", class_="Data02")
+                past_race_name = ""
+                past_cls_raw = ""
+                if data02:
+                    a = data02.find("a")
+                    if a:
+                        past_race_name = a.get_text().strip()
+                    cls_m = re.search(
+                        r"([1-3]勝ク(?:ラス)?|未勝利|新馬|OP|オープン|GⅠ|GⅡ|GⅢ|G[1-3]|Jpn[1-3])",
+                        past_race_name,
+                    )
+                    if cls_m:
+                        past_cls_raw = cls_m.group(1)
+
+                data05 = data_item.find("div", class_="Data05")
+                past_dist = 0
+                past_surface = ""
+                if data05:
+                    dm5 = re.search(r"(ダ|芝)(\d+)", data05.get_text())
+                    if dm5:
+                        past_surface = "ダ" if dm5.group(1) == "ダ" else "芝"
+                        past_dist = int(dm5.group(2))
+
+                data03 = data_item.find("div", class_="Data03")
+                field_size = 0
+                if data03:
+                    fs_m = re.search(r"(\d+)頭", data03.get_text())
+                    if fs_m:
+                        field_size = int(fs_m.group(1))
+
+                data06 = data_item.find("div", class_="Data06")
+                last_corner = 0
+                f3_val = 0.0
+                if data06:
+                    d06 = data06.get_text().replace("\xa0", " ").strip()
+                    cm6 = re.match(r"(\d+(?:-\d+)+)", d06)
+                    if cm6:
+                        corners = cm6.group(1).split("-")
+                        last_corner = int(corners[-1])
+                    f3m = re.search(r"\((\d{2}\.\d)\)", d06)
+                    if f3m:
+                        f3_val = float(f3m.group(1))
+
+                data07 = data_item.find("div", class_="Data07")
+                margin = None
+                if data07:
+                    d07 = data07.get_text().strip()
+                    mm = re.search(r"\((-?[\d.]+)\)\s*$", d07)
+                    if mm:
+                        val = float(mm.group(1))
+                        margin = 0.0 if val < 0 else val
+                    elif past_place == 1:
+                        margin = 0.0
+
+                past_place_str = f"{past_place}着" if past_place > 0 else ""
+
+                pr = {
+                    "race": past_race_name,
+                    "venue": rc_text,
+                    "isJRA": is_jra,
+                    "cls": past_cls_raw,
+                    "margin": margin,
+                    "place": past_place,
+                    "placeStr": past_place_str,
+                    "dist": past_dist,
+                    "surface": past_surface,
+                    "lastCorner": last_corner,
+                    "f3": f3_val,
+                    "fieldSize": field_size,
+                }
+                all_past.append(pr)
+
+                if is_jra and current_cls and past_cls_raw and normalize_class(past_cls_raw) == current_cls and margin is not None:
+                    qualifying_races.append({
+                        "race": past_race_name,
+                        "cls": past_cls_raw,
+                        "margin": margin,
+                        "place": past_place_str,
+                    })
+
+            horse["pastSameClass"] = qualifying_races
+            horse["bestMargin"] = min((r["margin"] for r in qualifying_races), default=999)
+            horse["pastRaces"] = all_past
+        except Exception:
+            pass
+
+    return {
+        "venue": venue,
+        "raceNum": race_num,
+        "raceName": race_name,
+        "grade": grade_info,
+        "course": course_info,
+        "surface": cur_surface,
+        "distance": cur_dist,
+        "date": date_info,
+        "url": url,
+        "horses": horses,
+    }
+
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         params = parse_qs(urlparse(self.path).query)
         url = params.get("url", [""])[0]
 
-        validated = validate_jra_url(url) if url else None
-        if not validated:
+        source, validated = classify_url(url) if url else (None, None)
+        if not source:
             self.send_response(400)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            self.wfile.write(json.dumps({"error": "JRAのレースURLを入力してください"}).encode())
+            self.wfile.write(json.dumps({"error": "JRAまたはnetkeibaのレースURLを入力してください"}).encode())
             return
 
         try:
-            data = scrape_race(validated)
+            data = scrape_race(validated) if source == "jra" else scrape_race_netkeiba(validated)
             if not data:
                 self.send_response(404)
                 self.send_header("Content-Type", "application/json")
