@@ -7,6 +7,7 @@ import re
 import json
 
 UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+JRA_TRACKS = {"札幌", "函館", "福島", "新潟", "東京", "中山", "中京", "京都", "阪神", "小倉"}
 
 
 def fetch_page(url):
@@ -150,16 +151,21 @@ def scrape_race(url):
                 if not time_span:
                     continue
 
+                rl_div = col.find("div", class_="race_line")
+                rl_text = rl_div.get_text() if rl_div else ""
+
+                if not any(t in rl_text for t in JRA_TRACKS):
+                    continue
+
                 past_cls_raw = ""
                 r_class_div = col.find("div", class_="r_class")
                 if r_class_div and r_class_div.get_text().strip():
                     past_cls_raw = r_class_div.get_text().strip()
                 else:
-                    rl_div = col.find("div", class_="race_line")
                     if rl_div:
                         rl_m = re.search(
                             r"([1-3]勝ク(?:ラス)?|未勝利|新馬|OP|オープン|GⅠ|GⅡ|GⅢ|G[1-3])",
-                            rl_div.get_text(),
+                            rl_text,
                         )
                         if rl_m:
                             past_cls_raw = rl_m.group(1)
