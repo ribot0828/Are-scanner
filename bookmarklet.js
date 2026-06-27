@@ -85,7 +85,10 @@ javascript:(()=>{
       let margin=null;
       const timeEl=cell.querySelector('.fin .time');
       if(timeEl){const mm=clean(timeEl.textContent).match(/(-?\d+(?:\.\d+)?)/);if(mm)margin=Math.abs(parseFloat(mm[1]));}
-      return{cls,margin,dist,sf,isJRA,lc,f3,fs};
+      let fp=0;
+      const placeEl=cell.querySelector('.place');
+      if(placeEl){const pm=clean(placeEl.textContent).match(/(\d+)/);if(pm)fp=parseInt(pm[1]);}
+      return{cls,margin,dist,sf,isJRA,lc,f3,fs,fp};
     }).filter(Boolean);
   };
 
@@ -115,7 +118,7 @@ javascript:(()=>{
       const pr=past[0];
       if(pr.isJRA&&pr.sf==='ダ'&&pr.dist>0&&pr.dist<curDist&&pr.f3>0&&pr.fs>0&&pr.lc>0){
         const th=pr.fs-C.backCount+1;
-        if(th>=1&&pr.lc>=th)hitD=true;
+        if(th>=1&&pr.lc>=th&&pr.fp>0&&pr.fp<=pr.lc)hitD=true;
       }
     }
 
@@ -125,7 +128,7 @@ javascript:(()=>{
     const type=hitM&&hitD?'両方':hitM?'1.0秒':'距離延長';
     let tip='Are Scanner: '+type;
     if(hitM)tip+=' | '+currentCls+'同クラス着差≤'+C.maxMargin+'秒 / '+o.odds+'倍';
-    if(hitD){const pr=past[0];tip+=' | ダ'+pr.dist+'→'+curDist+'m / 4角'+pr.lc+'番手('+pr.fs+'頭) / 3F'+pr.f3;}
+    if(hitD){const pr=past[0];tip+=' | ダ'+pr.dist+'→'+curDist+'m / 4角'+pr.lc+'番手→'+pr.fp+'着('+pr.fs+'頭) / 3F'+pr.f3;}
     o.a.title=tip;
     rows.push({馬名:o.name,単勝:o.odds,種別:type});
     if(hitM&&hitD)nB++;else if(hitM)nM++;else nD++;
