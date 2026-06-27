@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>D-Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f172a;
+    color: #e2e8f0;
+    font-family: 'Inter', 'Noto Sans JP', sans-serif;
+    min-height: 100vh;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 20px 16px; }
+
+  /* Header */
+  header { text-align: center; margin-bottom: 24px; }
+  h1 { font-size: 1.8rem; color: #f97316; letter-spacing: 0.05em; }
+  .tagline { color: #64748b; font-size: 0.85rem; margin-top: 4px; }
+
+  /* Input area */
+  .input-area {
+    display: flex; gap: 8px; margin-bottom: 24px;
+    max-width: 700px; margin-left: auto; margin-right: auto;
+  }
+  .input-area input {
+    flex: 1; padding: 10px 14px; border-radius: 8px;
+    border: 1px solid #334155; background: #1e293b; color: #e2e8f0;
+    font-size: 0.95rem; outline: none;
+  }
+  .input-area input::placeholder { color: #475569; }
+  .input-area input:focus { border-color: #f97316; }
+  .input-area button {
+    padding: 10px 24px; border-radius: 8px; border: none;
+    background: #f97316; color: #fff; font-weight: 700;
+    font-size: 0.95rem; cursor: pointer; white-space: nowrap;
+  }
+  .input-area button:hover { background: #ea580c; }
+  .input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Filter controls */
+  .filters {
+    display: flex; gap: 16px; align-items: center;
+    max-width: 700px; margin: 0 auto 16px;
+    font-size: 0.85rem; color: #94a3b8;
+  }
+  .filters label { display: flex; align-items: center; gap: 4px; }
+  .filters input[type="number"] {
+    width: 70px; padding: 4px 8px; border-radius: 6px;
+    border: 1px solid #334155; background: #1e293b; color: #e2e8f0;
+    font-size: 0.85rem; text-align: right;
+  }
+
+  /* Progress */
+  .progress-area { text-align: center; margin-bottom: 16px; }
+  .progress-bar-wrap {
+    width: 100%; max-width: 500px; margin: 8px auto;
+    background: #1e293b; border-radius: 6px; height: 8px; overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%; background: #f97316; border-radius: 6px;
+    transition: width 0.3s;
+  }
+  .progress-text { font-size: 0.85rem; color: #94a3b8; }
+
+  /* Summary */
+  .summary {
+    text-align: center; margin-bottom: 16px;
+    font-size: 0.95rem; color: #94a3b8;
+  }
+  .summary .count { color: #38bdf8; font-weight: 700; font-size: 1.2rem; }
+
+  /* Results table */
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th {
+    background: #1e293b; color: #94a3b8; padding: 10px 8px;
+    text-align: left; border-bottom: 2px solid #334155;
+    position: sticky; top: 0; z-index: 1;
+  }
+  td { padding: 10px 8px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+  tr:hover { background: #1e293b; }
+  .venue { color: #38bdf8; font-weight: 700; white-space: nowrap; }
+  .meta { color: #64748b; font-size: 0.8rem; }
+  .umaban { text-align: center; font-weight: 700; }
+  .name { font-weight: 700; white-space: nowrap; }
+  .odds { color: #f97316; font-weight: 700; text-align: right; white-space: nowrap; }
+  .best { color: #4ade80; font-weight: 700; text-align: center; }
+  .past-race { font-size: 0.8rem; color: #94a3b8; margin: 2px 0; }
+  .margin { color: #4ade80; }
+  .empty { text-align: center; padding: 40px; color: #64748b; font-size: 1.1rem; }
+  .hidden { display: none; }
+
+  @media (max-width: 640px) {
+    .input-area { flex-direction: column; }
+    table { font-size: 0.75rem; }
+    td, th { padding: 6px 4px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>D-Scanner</h1>
+    <div class="tagline">穴馬一括スキャン — オッズ100倍超 × 同クラス近走1.0秒以内</div>
+  </header>
+
+  <div class="input-area">
+    <input type="text" id="urlInput" placeholder="JRAレースURLを貼り付け（どのレースでもOK）">
+    <button id="scanBtn" onclick="startScan()">スキャン</button>
+  </div>
+
+  <div class="filters">
+    <label>最低オッズ:
+      <input type="number" id="minOdds" value="100" min="1" step="10">倍
+    </label>
+    <label>最大着差:
+      <input type="number" id="maxMargin" value="1.0" min="0.1" step="0.1">秒
+    </label>
+  </div>
+
+  <div id="progressArea" class="progress-area hidden">
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
+    <div class="progress-text" id="progressText">準備中...</div>
+  </div>
+
+  <div id="summary" class="summary hidden"></div>
+
+  <table id="resultTable" class="hidden">
+    <thead>
+      <tr><th>場/R</th><th>レース</th><th>馬番</th><th>馬名</th><th>オッズ</th><th>最小着差</th><th>該当レース</th></tr>
+    </thead>
+    <tbody id="resultBody"></tbody>
+  </table>
+</div>
+
+<script>
+let scanning = false;
+
+async function startScan() {
+  if (scanning) return;
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) { alert('URLを入力してください'); return; }
+
+  const minOdds = parseFloat(document.getElementById('minOdds').value) || 100;
+  const maxMargin = parseFloat(document.getElementById('maxMargin').value) || 1.0;
+
+  scanning = true;
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  btn.textContent = 'スキャン中...';
+
+  const progressArea = document.getElementById('progressArea');
+  const progressBar = document.getElementById('progressBar');
+  const progressText = document.getElementById('progressText');
+  const summary = document.getElementById('summary');
+  const resultTable = document.getElementById('resultTable');
+  const resultBody = document.getElementById('resultBody');
+
+  progressArea.classList.remove('hidden');
+  summary.classList.add('hidden');
+  resultTable.classList.add('hidden');
+  resultBody.innerHTML = '';
+  progressBar.style.width = '0%';
+  progressText.textContent = '全レースURL取得中...';
+
+  try {
+    // Step 1: Get all race URLs
+    const racesRes = await fetch(`/api/races?url=${encodeURIComponent(url)}`);
+    const racesData = await racesRes.json();
+    if (racesData.error) throw new Error(racesData.error);
+
+    const urls = racesData.urls;
+    const dateStr = racesData.date || '';
+    progressText.textContent = `${urls.length}レース検出 — スキャン開始`;
+
+    // Step 2: Fetch each race (parallel batches of 4)
+    const results = [];
+    const batchSize = 4;
+    let completed = 0;
+
+    for (let i = 0; i < urls.length; i += batchSize) {
+      const batch = urls.slice(i, i + batchSize);
+      const promises = batch.map(u =>
+        fetch(`/api/race?url=${encodeURIComponent(u)}`)
+          .then(r => r.json())
+          .catch(() => null)
+      );
+      const batchResults = await Promise.all(promises);
+
+      for (const race of batchResults) {
+        completed++;
+        const pct = Math.round((completed / urls.length) * 100);
+        progressBar.style.width = pct + '%';
+
+        if (!race || race.error) continue;
+
+        progressText.textContent = `[${completed}/${urls.length}] ${race.venue || ''}${race.raceNum || ''} ${race.raceName || ''}`;
+
+        for (const h of race.horses) {
+          if (h.odds < minOdds) continue;
+          if ((h.bestMargin || 999) > maxMargin) continue;
+          results.push({ ...h, venue: race.venue, raceNum: race.raceNum, raceName: race.raceName, grade: race.grade, course: race.course });
+        }
+      }
+    }
+
+    // Step 3: Display results
+    progressArea.classList.add('hidden');
+    summary.classList.remove('hidden');
+    summary.innerHTML = `${dateStr ? dateStr + ' | ' : ''}オッズ${minOdds}倍以上 × 同クラス近走${maxMargin}秒以内 | <span class="count">${results.length}頭</span>該当`;
+
+    resultTable.classList.remove('hidden');
+    if (results.length === 0) {
+      resultBody.innerHTML = '<tr><td colspan="7" class="empty">該当馬なし</td></tr>';
+    } else {
+      for (const r of results) {
+        let pastHtml = '';
+        for (const pr of (r.pastSameClass || [])) {
+          if (pr.margin <= maxMargin) {
+            pastHtml += `<div class="past-race">${pr.race} ${pr.place} <span class="margin">${pr.margin}秒差</span></div>`;
+          }
+        }
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="venue">${r.venue}${r.raceNum}</td>
+          <td>${r.raceName}<br><small class="meta">${r.grade} / ${r.course}</small></td>
+          <td class="umaban">${r.umaban}</td>
+          <td class="name">${r.name}</td>
+          <td class="odds">${r.odds}倍</td>
+          <td class="best">${r.bestMargin}秒</td>
+          <td>${pastHtml}</td>`;
+        resultBody.appendChild(tr);
+      }
+    }
+  } catch (e) {
+    progressText.textContent = 'エラー: ' + e.message;
+  } finally {
+    scanning = false;
+    btn.disabled = false;
+    btn.textContent = 'スキャン';
+  }
+}
+
+document.getElementById('urlInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') startScan();
+});
+</script>
+</body>
+</html>

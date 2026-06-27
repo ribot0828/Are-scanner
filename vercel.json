@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/api/races", "destination": "/api/races.py" },
+    { "source": "/api/race", "destination": "/api/race.py" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
