@@ -63,13 +63,16 @@ javascript:(()=>{
       const dm=run.match(/(ダ(?:ート)?|芝)\s*(\d{3,4})/);
       if(dm){sf=dm[1].startsWith('ダ')?'ダ':'芝';dist=parseInt(dm[2]);}
       const isJRA=JRA.some(t=>run.includes(t));
-      let lc=0;
-      const c4=run.match(/(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})/);
-      if(c4)lc=parseInt(c4[4]);
-      else{const c3=run.match(/(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})/);if(c3)lc=parseInt(c3[3]);}
-      let f3=0;
-      const f3m=run.match(/(?:上[がりり]*\s*)?3F\s*(\d{2}\.\d)/);
-      if(f3m)f3=parseFloat(f3m[1]);
+      let lc=0,f3=0;
+      const cf=run.match(/(\d{1,2}(?:\s+\d{1,2}){1,3})\s+3F\s*(\d{2}\.\d)/);
+      if(cf){const cs=cf[1].trim().split(/\s+/);lc=parseInt(cs[cs.length-1]);f3=parseFloat(cf[2]);}
+      else{
+        const c4=run.match(/(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})/);
+        if(c4)lc=parseInt(c4[4]);
+        else{const c3=run.match(/(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})/);if(c3)lc=parseInt(c3[3]);}
+        const f3m=run.match(/(?:上[がりり]*\s*)?3F\s*(\d{2}\.\d)/);
+        if(f3m)f3=parseFloat(f3m[1]);
+      }
       let fs=0;
       const fsm=run.match(/(\d+)\s*頭/);
       if(fsm)fs=parseInt(fsm[1]);
