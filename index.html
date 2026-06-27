@@ -134,8 +134,8 @@
   </div>
 
   <div id="filtersDist" class="filters hidden">
-    <label>4角位置(後方判定):
-      <input type="number" id="minCorner" value="8" min="1" step="1">番手以降
+    <label>後方判定:
+      後ろから<input type="number" id="backCount" value="3" min="1" max="6" step="1">頭以内
     </label>
   </div>
 
@@ -197,7 +197,7 @@ function filterAnauma(races) {
 }
 
 function filterDistExtension(races) {
-  const minCorner = parseInt(document.getElementById('minCorner').value) || 8;
+  const backCount = parseInt(document.getElementById('backCount').value) || 3;
   const results = [];
   for (const race of races) {
     if (race.surface !== 'ダ') continue;
@@ -212,8 +212,10 @@ function filterDistExtension(races) {
         if (!pr.isJRA) continue;
         if (pr.surface !== 'ダ') continue;
         if (pr.dist >= curDist) continue;
-        if (pr.lastCorner < minCorner) continue;
         if (pr.f3 <= 0) continue;
+        if (!pr.fieldSize || !pr.lastCorner) continue;
+        const threshold = pr.fieldSize - backCount + 1;
+        if (threshold < 1 || pr.lastCorner < threshold) continue;
 
         qualifying.push(pr);
       }
