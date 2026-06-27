@@ -63,7 +63,9 @@ javascript:(()=>{
       const margin=margins.length>0?Math.min(...margins.map(Math.abs)):null;
       let dist=0,sf='';
       const dm=run.match(/(ダ(?:ート)?|芝)\s*(\d{3,4})/);
+      const dm2=run.match(/(\d{3,4})(ダ(?:ート)?|芝)/);
       if(dm){sf=dm[1].startsWith('ダ')?'ダ':'芝';dist=parseInt(dm[2]);}
+      else if(dm2){dist=parseInt(dm2[1]);sf=dm2[2].startsWith('ダ')?'ダ':'芝';}
       const isJRA=JRA.some(t=>run.includes(t));
       let lc=0,f3=0;
       const cf=run.match(/(\d{1,2}(?:\s+\d{1,2}){1,3})\s+3F\s*(\d{2}\.\d)/);
