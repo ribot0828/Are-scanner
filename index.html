@@ -16,14 +16,22 @@
   }
   .container { max-width: 1100px; margin: 0 auto; padding: 20px 16px; }
 
-  /* Header */
   header { text-align: center; margin-bottom: 24px; }
   h1 { font-size: 1.8rem; color: #f97316; letter-spacing: 0.05em; }
   .tagline { color: #64748b; font-size: 0.85rem; margin-top: 4px; }
 
-  /* Input area */
+  .mode-tabs {
+    display: flex; justify-content: center; gap: 4px; margin-bottom: 16px;
+  }
+  .mode-tab {
+    padding: 8px 20px; border-radius: 8px; border: 1px solid #334155;
+    background: #1e293b; color: #94a3b8; font-size: 0.85rem;
+    cursor: pointer; font-weight: 600;
+  }
+  .mode-tab.active { background: #f97316; color: #fff; border-color: #f97316; }
+
   .input-area {
-    display: flex; gap: 8px; margin-bottom: 24px;
+    display: flex; gap: 8px; margin-bottom: 16px;
     max-width: 700px; margin-left: auto; margin-right: auto;
   }
   .input-area input {
@@ -41,9 +49,8 @@
   .input-area button:hover { background: #ea580c; }
   .input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  /* Filter controls */
   .filters {
-    display: flex; gap: 16px; align-items: center;
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
     max-width: 700px; margin: 0 auto 16px;
     font-size: 0.85rem; color: #94a3b8;
   }
@@ -54,7 +61,6 @@
     font-size: 0.85rem; text-align: right;
   }
 
-  /* Progress */
   .progress-area { text-align: center; margin-bottom: 16px; }
   .progress-bar-wrap {
     width: 100%; max-width: 500px; margin: 8px auto;
@@ -66,14 +72,12 @@
   }
   .progress-text { font-size: 0.85rem; color: #94a3b8; }
 
-  /* Summary */
   .summary {
     text-align: center; margin-bottom: 16px;
     font-size: 0.95rem; color: #94a3b8;
   }
   .summary .count { color: #38bdf8; font-weight: 700; font-size: 1.2rem; }
 
-  /* Results table */
   table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   th {
     background: #1e293b; color: #94a3b8; padding: 10px 8px;
@@ -90,6 +94,8 @@
   .best { color: #4ade80; font-weight: 700; text-align: center; }
   .past-race { font-size: 0.8rem; color: #94a3b8; margin: 2px 0; }
   .margin { color: #4ade80; }
+  .dist-ext { color: #a78bfa; font-weight: 700; }
+  .corner-back { color: #fb923c; }
   .empty { text-align: center; padding: 40px; color: #64748b; font-size: 1.1rem; }
   .hidden { display: none; }
 
@@ -97,6 +103,7 @@
     .input-area { flex-direction: column; }
     table { font-size: 0.75rem; }
     td, th { padding: 6px 4px; }
+    .filters { flex-direction: column; align-items: flex-start; }
   }
 </style>
 </head>
@@ -104,20 +111,31 @@
 <div class="container">
   <header>
     <h1>Are Scanner</h1>
-    <div class="tagline">穴馬一括スキャン — オッズ100倍超 × 同クラス近走1.0秒以内</div>
+    <div class="tagline" id="tagline">穴馬一括スキャン</div>
   </header>
+
+  <div class="mode-tabs">
+    <div class="mode-tab active" data-mode="anauma" onclick="setMode('anauma')">穴馬スキャン</div>
+    <div class="mode-tab" data-mode="dist" onclick="setMode('dist')">距離延長スキャン</div>
+  </div>
 
   <div class="input-area">
     <input type="text" id="urlInput" placeholder="JRAレースURLを貼り付け（PC版・スマホ版どちらでもOK）">
     <button id="scanBtn" onclick="startScan()">スキャン</button>
   </div>
 
-  <div class="filters">
+  <div id="filtersAnauma" class="filters">
     <label>最低オッズ:
       <input type="number" id="minOdds" value="100" min="1" step="10">倍
     </label>
     <label>最大着差:
       <input type="number" id="maxMargin" value="1.0" min="0.1" step="0.1">秒
+    </label>
+  </div>
+
+  <div id="filtersDist" class="filters hidden">
+    <label>4角位置(後方判定):
+      <input type="number" id="minCorner" value="8" min="1" step="1">番手以降
     </label>
   </div>
 
@@ -129,9 +147,7 @@
   <div id="summary" class="summary hidden"></div>
 
   <table id="resultTable" class="hidden">
-    <thead>
-      <tr><th>場/R</th><th>レース</th><th>馬番</th><th>馬名</th><th>オッズ</th><th>最小着差</th><th>該当レース</th></tr>
-    </thead>
+    <thead id="resultHead"></thead>
     <tbody id="resultBody"></tbody>
   </table>
 </div>
@@ -139,6 +155,7 @@
 <script>
 let scanning = false;
 let lastScanTime = 0;
+let currentMode = 'anauma';
 const COOLDOWN_MS = 3 * 60 * 1000;
 const BATCH_DELAY_MS = 2000;
 
@@ -148,8 +165,133 @@ function esc(s) {
   return d.innerHTML;
 }
 
-async function sleep(ms) {
+function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+  document.getElementById('filtersAnauma').classList.toggle('hidden', mode !== 'anauma');
+  document.getElementById('filtersDist').classList.toggle('hidden', mode !== 'dist');
+  const tagline = document.getElementById('tagline');
+  if (mode === 'anauma') {
+    tagline.textContent = '穴馬一括スキャン — オッズ100倍超 × 同クラス近走1.0秒以内';
+  } else {
+    tagline.textContent = '距離延長スキャン — ダート距離延長 × 後方待機 × 上がり上位';
+  }
+}
+
+function filterAnauma(races) {
+  const minOdds = parseFloat(document.getElementById('minOdds').value) || 100;
+  const maxMargin = parseFloat(document.getElementById('maxMargin').value) || 1.0;
+  const results = [];
+  for (const race of races) {
+    for (const h of race.horses) {
+      if (h.odds < minOdds) continue;
+      if ((h.bestMargin || 999) > maxMargin) continue;
+      results.push({ ...h, venue: race.venue, raceNum: race.raceNum, raceName: race.raceName, grade: race.grade, course: race.course });
+    }
+  }
+  return results;
+}
+
+function filterDistExtension(races) {
+  const minCorner = parseInt(document.getElementById('minCorner').value) || 8;
+  const results = [];
+  for (const race of races) {
+    if (race.surface !== 'ダ') continue;
+    const curDist = race.distance || 0;
+    if (!curDist) continue;
+
+    for (const h of race.horses) {
+      if (!h.pastRaces || h.pastRaces.length === 0) continue;
+
+      const qualifying = [];
+      for (const pr of h.pastRaces) {
+        if (!pr.isJRA) continue;
+        if (pr.surface !== 'ダ') continue;
+        if (pr.dist >= curDist) continue;
+        if (pr.lastCorner < minCorner) continue;
+        if (pr.f3 <= 0) continue;
+
+        qualifying.push(pr);
+      }
+
+      if (qualifying.length === 0) continue;
+      const best = qualifying.reduce((a, b) => (a.f3 < b.f3 ? a : b));
+      results.push({
+        ...h,
+        venue: race.venue, raceNum: race.raceNum, raceName: race.raceName,
+        grade: race.grade, course: race.course,
+        curDist: curDist,
+        distExtRaces: qualifying,
+        bestQualifying: best,
+      });
+    }
+  }
+  results.sort((a, b) => a.bestQualifying.f3 - b.bestQualifying.f3);
+  return results;
+}
+
+function renderAnaumaResults(results) {
+  const head = document.getElementById('resultHead');
+  const body = document.getElementById('resultBody');
+  const maxMargin = parseFloat(document.getElementById('maxMargin').value) || 1.0;
+  head.innerHTML = '<tr><th>場/R</th><th>レース</th><th>馬番</th><th>馬名</th><th>オッズ</th><th>最小着差</th><th>該当レース</th></tr>';
+  body.innerHTML = '';
+  if (results.length === 0) {
+    body.innerHTML = '<tr><td colspan="7" class="empty">該当馬なし</td></tr>';
+    return;
+  }
+  for (const r of results) {
+    let pastHtml = '';
+    for (const pr of (r.pastSameClass || [])) {
+      if (pr.margin <= maxMargin) {
+        pastHtml += `<div class="past-race">${esc(pr.race)} ${esc(pr.place)} <span class="margin">${pr.margin}秒差</span></div>`;
+      }
+    }
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="venue">${esc(r.venue)}${esc(r.raceNum)}</td>
+      <td>${esc(r.raceName)}<br><small class="meta">${esc(r.grade)} / ${esc(r.course)}</small></td>
+      <td class="umaban">${r.umaban}</td>
+      <td class="name">${esc(r.name)}</td>
+      <td class="odds">${r.odds}倍</td>
+      <td class="best">${r.bestMargin}秒</td>
+      <td>${pastHtml}</td>`;
+    body.appendChild(tr);
+  }
+}
+
+function renderDistResults(results) {
+  const head = document.getElementById('resultHead');
+  const body = document.getElementById('resultBody');
+  head.innerHTML = '<tr><th>場/R</th><th>レース</th><th>馬番</th><th>馬名</th><th>オッズ</th><th>距離変化</th><th>前走4角</th><th>上がり3F</th><th>前走着順</th></tr>';
+  body.innerHTML = '';
+  if (results.length === 0) {
+    body.innerHTML = '<tr><td colspan="9" class="empty">該当馬なし</td></tr>';
+    return;
+  }
+  for (const r of results) {
+    let detailHtml = '';
+    for (const pr of r.distExtRaces) {
+      detailHtml += `<div class="past-race">${esc(pr.venue)} ${esc(pr.race)} <span class="dist-ext">${pr.dist}m→${r.curDist}m</span> 4角<span class="corner-back">${pr.lastCorner}番手</span> 3F${pr.f3} ${esc(pr.placeStr)}/${pr.fieldSize}頭</div>`;
+    }
+    const bp = r.bestQualifying;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="venue">${esc(r.venue)}${esc(r.raceNum)}</td>
+      <td>${esc(r.raceName)}<br><small class="meta">${esc(r.grade)} / ${esc(r.course)}</small></td>
+      <td class="umaban">${r.umaban}</td>
+      <td class="name">${esc(r.name)}</td>
+      <td class="odds">${r.odds}倍</td>
+      <td class="dist-ext">${bp.dist}→${r.curDist}m</td>
+      <td class="corner-back">${bp.lastCorner}番手</td>
+      <td class="best">${bp.f3}</td>
+      <td>${esc(bp.placeStr)}/${bp.fieldSize}頭</td>`;
+    body.appendChild(tr);
+  }
 }
 
 async function startScan() {
@@ -172,9 +314,6 @@ async function startScan() {
     return;
   }
 
-  const minOdds = parseFloat(document.getElementById('minOdds').value) || 100;
-  const maxMargin = parseFloat(document.getElementById('maxMargin').value) || 1.0;
-
   scanning = true;
   const btn = document.getElementById('scanBtn');
   btn.disabled = true;
@@ -195,7 +334,6 @@ async function startScan() {
   progressText.textContent = '全レースURL取得中...';
 
   try {
-    // Step 1: Get all race URLs
     const racesRes = await fetch(`/api/races?url=${encodeURIComponent(url)}`);
     const racesData = await racesRes.json();
     if (racesData.error) throw new Error(racesData.error);
@@ -204,8 +342,7 @@ async function startScan() {
     const dateStr = racesData.date || '';
     progressText.textContent = `${urls.length}レース検出 — スキャン開始`;
 
-    // Step 2: Fetch each race (parallel batches of 4)
-    const results = [];
+    const allRaces = [];
     const batchSize = 4;
     let completed = 0;
 
@@ -224,48 +361,28 @@ async function startScan() {
         completed++;
         const pct = Math.round((completed / urls.length) * 100);
         progressBar.style.width = pct + '%';
-
         if (!race || race.error) continue;
-
         progressText.textContent = `[${completed}/${urls.length}] ${race.venue || ''}${race.raceNum || ''} ${race.raceName || ''}`;
-
-        for (const h of race.horses) {
-          if (h.odds < minOdds) continue;
-          if ((h.bestMargin || 999) > maxMargin) continue;
-          results.push({ ...h, venue: race.venue, raceNum: race.raceNum, raceName: race.raceName, grade: race.grade, course: race.course });
-        }
+        allRaces.push(race);
       }
     }
 
-    // Step 3: Display results
+    lastScanTime = Date.now();
     progressArea.classList.add('hidden');
     summary.classList.remove('hidden');
-    lastScanTime = Date.now();
-    summary.innerHTML = `${esc(dateStr) ? esc(dateStr) + ' | ' : ''}オッズ${minOdds}倍以上 × 同クラス近走${maxMargin}秒以内 | <span class="count">${results.length}頭</span>該当`;
+
+    let results;
+    if (currentMode === 'anauma') {
+      results = filterAnauma(allRaces);
+      summary.innerHTML = `${esc(dateStr) ? esc(dateStr) + ' | ' : ''}穴馬スキャン | <span class="count">${results.length}頭</span>該当`;
+      renderAnaumaResults(results);
+    } else {
+      results = filterDistExtension(allRaces);
+      summary.innerHTML = `${esc(dateStr) ? esc(dateStr) + ' | ' : ''}距離延長スキャン（ダート） | <span class="count">${results.length}頭</span>該当`;
+      renderDistResults(results);
+    }
 
     resultTable.classList.remove('hidden');
-    if (results.length === 0) {
-      resultBody.innerHTML = '<tr><td colspan="7" class="empty">該当馬なし</td></tr>';
-    } else {
-      for (const r of results) {
-        let pastHtml = '';
-        for (const pr of (r.pastSameClass || [])) {
-          if (pr.margin <= maxMargin) {
-            pastHtml += `<div class="past-race">${esc(pr.race)} ${esc(pr.place)} <span class="margin">${pr.margin}秒差</span></div>`;
-          }
-        }
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="venue">${esc(r.venue)}${esc(r.raceNum)}</td>
-          <td>${esc(r.raceName)}<br><small class="meta">${esc(r.grade)} / ${esc(r.course)}</small></td>
-          <td class="umaban">${r.umaban}</td>
-          <td class="name">${esc(r.name)}</td>
-          <td class="odds">${r.odds}倍</td>
-          <td class="best">${r.bestMargin}秒</td>
-          <td>${pastHtml}</td>`;
-        resultBody.appendChild(tr);
-      }
-    }
   } catch (e) {
     progressText.textContent = 'エラー: ' + e.message;
   } finally {

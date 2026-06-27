@@ -145,7 +145,11 @@ def scrape_race(url):
             detail_tbl = t
             break
 
-    if detail_tbl and current_cls:
+    cur_surface = "ダ" if "ダ" in course_info else ("芝" if "芝" in course_info else "")
+    cur_dist_m = re.search(r"(\d+)m", course_info)
+    cur_dist = int(cur_dist_m.group(1)) if cur_dist_m else 0
+
+    if detail_tbl:
         for row in detail_tbl.find_all("tr")[1:]:
             cols = row.find_all("td")
             if len(cols) < 6:
@@ -159,6 +163,7 @@ def scrape_race(url):
                 continue
 
             qualifying_races = []
+            all_past = []
             for ci in range(6, min(11, len(cols))):
                 col = cols[ci]
                 time_span = col.find("span", class_="time")
@@ -167,8 +172,55 @@ def scrape_race(url):
 
                 rc_div = col.find("div", class_="rc")
                 rc_text = rc_div.get_text().strip() if rc_div else ""
-                if not any(t in rc_text for t in JRA_TRACKS):
-                    continue
+                is_jra = any(t in rc_text for t in JRA_TRACKS)
+
+                margin_m = re.search(r"[(（]([\d.]+)[)）]", time_span.get_text())
+                margin = float(margin_m.group(1)) if margin_m else None
+
+                race_name_div = col.find("div", class_="name")
+                place_div = col.find("div", class_="place")
+                past_race_name = race_name_div.get_text().strip() if race_name_div else ""
+                past_place_str = place_div.get_text().strip() if place_div else ""
+                past_place_m = re.search(r"(\d+)", past_place_str)
+                past_place = int(past_place_m.group(1)) if past_place_m else 0
+
+                past_dist = 0
+                past_surface = ""
+                info2 = col.find("div", class_="info_line2")
+                if info2:
+                    lines = info2.find_all("div", class_="line")
+                    if lines:
+                        cl = lines[0].find("div", class_=lambda c: c and "left" in str(c))
+                        if cl:
+                            dt = cl.get_text().strip()
+                            dm2 = re.match(r"(\d+)(.*)", dt)
+                            if dm2:
+                                past_dist = int(dm2.group(1))
+                                sf = dm2.group(2).strip()
+                                if "ダ" in sf:
+                                    past_surface = "ダ"
+                                elif "芝" in sf:
+                                    past_surface = "芝"
+
+                corner_div = col.find("div", class_="corner_list")
+                corners = []
+                last_corner = 0
+                if corner_div:
+                    corners = re.findall(r"\d+", corner_div.get_text())
+                    corners = [int(c) for c in corners]
+                    last_corner = corners[-1] if corners else 0
+
+                f3_val = 0.0
+                f3_div = col.find("div", class_="f3")
+                if f3_div:
+                    f3_m = re.search(r"([\d.]+)", f3_div.get_text())
+                    f3_val = float(f3_m.group(1)) if f3_m else 0.0
+
+                field_size = 0
+                num_div = col.find("div", class_="num")
+                if num_div:
+                    fs_m = re.search(r"(\d+)頭", num_div.get_text())
+                    field_size = int(fs_m.group(1)) if fs_m else 0
 
                 past_cls_raw = ""
                 r_class_div = col.find("div", class_="r_class")
@@ -184,28 +236,33 @@ def scrape_race(url):
                         if rl_m:
                             past_cls_raw = rl_m.group(1)
 
-                if not past_cls_raw or normalize_class(past_cls_raw) != current_cls:
-                    continue
-
-                margin_m = re.search(r"[(（]([\d.]+)[)）]", time_span.get_text())
-                if not margin_m:
-                    continue
-                margin = float(margin_m.group(1))
-
-                race_name_div = col.find("div", class_="name")
-                place_div = col.find("div", class_="place")
-                past_race_name = race_name_div.get_text().strip() if race_name_div else ""
-                past_place = place_div.get_text().strip() if place_div else ""
-
-                qualifying_races.append({
+                pr = {
                     "race": past_race_name,
+                    "venue": rc_text,
+                    "isJRA": is_jra,
                     "cls": past_cls_raw,
                     "margin": margin,
                     "place": past_place,
-                })
+                    "placeStr": past_place_str,
+                    "dist": past_dist,
+                    "surface": past_surface,
+                    "lastCorner": last_corner,
+                    "f3": f3_val,
+                    "fieldSize": field_size,
+                }
+                all_past.append(pr)
+
+                if is_jra and current_cls and past_cls_raw and normalize_class(past_cls_raw) == current_cls and margin is not None:
+                    qualifying_races.append({
+                        "race": past_race_name,
+                        "cls": past_cls_raw,
+                        "margin": margin,
+                        "place": past_place_str,
+                    })
 
             horse["pastSameClass"] = qualifying_races
             horse["bestMargin"] = min((r["margin"] for r in qualifying_races), default=999)
+            horse["pastRaces"] = all_past
 
     return {
         "venue": venue,
@@ -213,6 +270,8 @@ def scrape_race(url):
         "raceName": race_name,
         "grade": grade_info,
         "course": course_info,
+        "surface": cur_surface,
+        "distance": cur_dist,
         "date": date_info,
         "url": url,
         "horses": horses,
