@@ -207,28 +207,21 @@ function filterDistExtension(races) {
     for (const h of race.horses) {
       if (!h.pastRaces || h.pastRaces.length === 0) continue;
 
-      const qualifying = [];
-      for (const pr of h.pastRaces) {
-        if (!pr.isJRA) continue;
-        if (pr.surface !== 'ダ') continue;
-        if (pr.dist >= curDist) continue;
-        if (pr.f3 <= 0) continue;
-        if (!pr.fieldSize || !pr.lastCorner) continue;
-        const threshold = pr.fieldSize - backCount + 1;
-        if (threshold < 1 || pr.lastCorner < threshold) continue;
+      const pr = h.pastRaces[0];
+      if (!pr.isJRA) continue;
+      if (pr.surface !== 'ダ') continue;
+      if (pr.dist >= curDist) continue;
+      if (pr.f3 <= 0) continue;
+      if (!pr.fieldSize || !pr.lastCorner) continue;
+      const threshold = pr.fieldSize - backCount + 1;
+      if (threshold < 1 || pr.lastCorner < threshold) continue;
 
-        qualifying.push(pr);
-      }
-
-      if (qualifying.length === 0) continue;
-      const best = qualifying.reduce((a, b) => (a.f3 < b.f3 ? a : b));
       results.push({
         ...h,
         venue: race.venue, raceNum: race.raceNum, raceName: race.raceName,
         grade: race.grade, course: race.course,
         curDist: curDist,
-        distExtRaces: qualifying,
-        bestQualifying: best,
+        bestQualifying: pr,
       });
     }
   }
@@ -276,10 +269,6 @@ function renderDistResults(results) {
     return;
   }
   for (const r of results) {
-    let detailHtml = '';
-    for (const pr of r.distExtRaces) {
-      detailHtml += `<div class="past-race">${esc(pr.venue)} ${esc(pr.race)} <span class="dist-ext">${pr.dist}m→${r.curDist}m</span> 4角<span class="corner-back">${pr.lastCorner}番手</span> 3F${pr.f3} ${esc(pr.placeStr)}/${pr.fieldSize}頭</div>`;
-    }
     const bp = r.bestQualifying;
     const tr = document.createElement('tr');
     tr.innerHTML = `
