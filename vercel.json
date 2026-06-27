@@ -1,7 +1,34 @@
 {
-  "rewrites": [
-    { "source": "/api/races", "destination": "/api/races.py" },
-    { "source": "/api/race", "destination": "/api/race.py" },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "builds": [
+    {
+      "src": "api/races.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/race.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "*.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/races",
+      "dest": "/api/races.py"
+    },
+    {
+      "src": "/api/race",
+      "dest": "/api/race.py"
+    },
+    {
+      "src": "/",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
   ]
 }
