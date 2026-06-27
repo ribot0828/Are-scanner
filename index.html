@@ -193,6 +193,12 @@ function filterAnauma(races) {
       results.push({ ...h, venue: race.venue, raceNum: race.raceNum, raceName: race.raceName, grade: race.grade, course: race.course });
     }
   }
+  results.sort((a, b) => {
+    if (a.venue !== b.venue) return a.venue.localeCompare(b.venue);
+    const ra = parseInt(a.raceNum) || 0;
+    const rb = parseInt(b.raceNum) || 0;
+    return ra - rb;
+  });
   return results;
 }
 
@@ -225,7 +231,12 @@ function filterDistExtension(races) {
       });
     }
   }
-  results.sort((a, b) => a.bestQualifying.f3 - b.bestQualifying.f3);
+  results.sort((a, b) => {
+    if (a.venue !== b.venue) return a.venue.localeCompare(b.venue);
+    const ra = parseInt(a.raceNum) || 0;
+    const rb = parseInt(b.raceNum) || 0;
+    return ra - rb;
+  });
   return results;
 }
 
