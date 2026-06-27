@@ -31,8 +31,10 @@ javascript:(()=>{
   const header=clean(body.slice(hS,hE));
   const currentCls=clsFn(header);
   let curSf='',curDist=0;
-  const cm=header.match(/(ダ(?:ート)?|芝)\s*[\/・]?\s*(\d{3,4})\s*(?:m|メートル)?/);
-  if(cm){curSf=cm[1].startsWith('ダ')?'ダ':'芝';curDist=parseInt(cm[2]);}
+  const cm1=header.match(/([\d,]+)\s*メートル\s*[（(]\s*(ダ(?:ート)?|芝)/);
+  const cm2=header.match(/(ダ(?:ート)?|芝)\s*([\d,]+)\s*(?:m|メートル)/);
+  if(cm1){curDist=parseInt(cm1[1].replace(/,/g,''));curSf=cm1[2].startsWith('ダ')?'ダ':'芝';}
+  else if(cm2){curSf=cm2[1].startsWith('ダ')?'ダ':'芝';curDist=parseInt(cm2[2].replace(/,/g,''));}
 
   /* 馬検出 */
   const txtAfter=(n,len)=>{try{const r=document.createRange();r.setStartAfter(n);r.setEnd(document.body,document.body.childNodes.length);return clean(r.toString()).slice(0,len||3000)}catch{return''}};
