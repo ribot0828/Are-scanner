@@ -3,7 +3,7 @@ javascript:(()=>{
   const C={minOdds:100,maxMargin:1.0,maxPast:5,backCount:3};
   const Z='０１２３４５６７８９．－＋，　',H='0123456789.-+, ';
   const half=s=>String(s||'').replace(/[０-９．－＋，　]/g,c=>{const i=Z.indexOf(c);return i>=0?H[i]:c});
-  const clean=s=>half(s).replace(/ /g,' ').replace(/\s+/g,' ').trim();
+  const clean=s=>half(s).replace(/ /g,' ').replace(/\s+/g,' ').trim();
   const JRA=['札幌','函館','福島','新潟','東京','中山','中京','京都','阪神','小倉'];
   const clsFn=s=>{
     s=clean(s);
@@ -38,7 +38,6 @@ javascript:(()=>{
 
   /* 馬検出 */
   const txtAfter=(n,len)=>{try{const r=document.createRange();r.setStartAfter(n);r.setEnd(document.body,document.body.childNodes.length);return clean(r.toString()).slice(0,len||3000)}catch{return''}};
-  const txtRange=(a,b)=>{try{const r=document.createRange();r.setStartBefore(a);if(b)r.setEndBefore(b);else r.setEnd(document.body,document.body.childNodes.length);return r.toString()}catch{return''}};
   const anchors=[...document.querySelectorAll('a')].filter(a=>clean(a.textContent).length>=2);
   const horses=[];
   for(const a of anchors){
@@ -50,39 +49,44 @@ javascript:(()=>{
     horses.push({a,odds:Number(m[1]),name:clean(a.textContent)});
   }
 
-  /* 過去レースパース */
-  const parsePast=block=>{
-    const lines=String(block).split(/\n+/).map(clean).filter(Boolean);
-    const idx=[];
-    for(let i=0;i<lines.length;i++)if(/^\d{4}年\d{1,2}月\d{1,2}日/.test(lines[i]))idx.push(i);
-    const races=[];
-    for(let k=0;k<idx.length;k++){
-      const run=lines.slice(idx[k],idx[k+1]??lines.length).join(' ');
-      const rcls=clsFn(run);
-      const margins=[...run.matchAll(/[\(（]\s*(-?\d+(?:\.\d+)?)\s*[\)）]/g)].map(x=>Number(x[1])).filter(Number.isFinite);
-      const margin=margins.length>0?Math.min(...margins.map(Math.abs)):null;
+  /* DOM-based past race parsing */
+  const parsePastDOM=(anchor)=>{
+    const tr=anchor.closest('tr');
+    if(!tr)return[];
+    const cells=[...tr.querySelectorAll('td.past')];
+    return cells.map(cell=>{
+      const dateEl=cell.querySelector('.date');
+      if(!dateEl||!clean(dateEl.textContent))return null;
+      const rcEl=cell.querySelector('.rc');
+      const venue=rcEl?clean(rcEl.textContent):'';
+      const isJRA=JRA.some(t=>venue.includes(t));
+      const distEl=cell.querySelector('.dist');
+      const dt=distEl?clean(distEl.textContent):'';
       let dist=0,sf='';
-      const dm=run.match(/(ダ(?:ート)?|芝)\s*(\d{3,4})/);
-      const dm2=run.match(/(\d{3,4})(ダ(?:ート)?|芝)/);
-      if(dm){sf=dm[1].startsWith('ダ')?'ダ':'芝';dist=parseInt(dm[2]);}
-      else if(dm2){dist=parseInt(dm2[1]);sf=dm2[2].startsWith('ダ')?'ダ':'芝';}
-      const isJRA=JRA.some(t=>run.includes(t));
-      let lc=0,f3=0;
-      const cf=run.match(/(\d{1,2}(?:\s+\d{1,2}){1,3})\s+3F\s*(\d{2}\.\d)/);
-      if(cf){const cs=cf[1].trim().split(/\s+/);lc=parseInt(cs[cs.length-1]);f3=parseFloat(cf[2]);}
-      else{
-        const c4=run.match(/(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})/);
-        if(c4)lc=parseInt(c4[4]);
-        else{const c3=run.match(/(\d{1,2})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})/);if(c3)lc=parseInt(c3[3]);}
-        const f3m=run.match(/(?:上[がりり]*\s*)?3F\s*(\d{2}\.\d)/);
-        if(f3m)f3=parseFloat(f3m[1]);
-      }
+      const d1=dt.match(/(\d{3,4})(ダ(?:ート)?|芝)/);
+      const d2=dt.match(/(ダ(?:ート)?|芝)\s*(\d{3,4})/);
+      if(d1){dist=parseInt(d1[1]);sf=d1[2].startsWith('ダ')?'ダ':'芝';}
+      else if(d2){sf=d2[1].startsWith('ダ')?'ダ':'芝';dist=parseInt(d2[2]);}
+      const cLis=[...cell.querySelectorAll('.corner_list li')];
+      let lc=0;
+      if(cLis.length>0)lc=parseInt(clean(cLis[cLis.length-1].textContent))||0;
+      const f3El=cell.querySelector('.f3');
+      let f3=0;
+      if(f3El){const fm=clean(f3El.textContent).match(/(\d{2}\.\d)/);if(fm)f3=parseFloat(fm[1]);}
       let fs=0;
-      const fsm=run.match(/(\d+)\s*頭/);
-      if(fsm)fs=parseInt(fsm[1]);
-      races.push({cls:rcls,margin,dist,sf,isJRA,lc,f3,fs});
-    }
-    return races;
+      const maxEl=cell.querySelector('.max');
+      if(maxEl){const fsm=clean(maxEl.textContent).match(/(\d+)/);if(fsm)fs=parseInt(fsm[1]);}
+      const clsEl=cell.querySelector('.r_class');
+      const nameEl=cell.querySelector('.race_line .name');
+      let clsRaw='';
+      if(clsEl)clsRaw=clean(clsEl.textContent);
+      if(!clsRaw&&nameEl)clsRaw=clean(nameEl.textContent);
+      const cls=clsFn(clsRaw);
+      let margin=null;
+      const timeEl=cell.querySelector('.fin .time');
+      if(timeEl){const mm=clean(timeEl.textContent).match(/(-?\d+(?:\.\d+)?)/);if(mm)margin=Math.abs(parseFloat(mm[1]));}
+      return{cls,margin,dist,sf,isJRA,lc,f3,fs};
+    }).filter(Boolean);
   };
 
   /* スタイル */
@@ -95,9 +99,8 @@ javascript:(()=>{
   let nM=0,nD=0,nB=0;
   const rows=[];
   for(let i=0;i<horses.length;i++){
-    const o=horses[i],next=horses[i+1]?.a;
-    const block=txtRange(o.a,next);
-    const past=parsePast(block);
+    const o=horses[i];
+    const past=parsePastDOM(o.a);
     let hitM=false,hitD=false;
 
     /* 1.0秒スキャン: 単勝100倍以上 + 同クラス近5走で着差1.0秒以内 */
