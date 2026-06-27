@@ -108,7 +108,7 @@
   </header>
 
   <div class="input-area">
-    <input type="text" id="urlInput" placeholder="JRAレースURLを貼り付け（どのレースでもOK）">
+    <input type="text" id="urlInput" placeholder="JRAレースURLを貼り付け（PC版・スマホ版どちらでもOK）">
     <button id="scanBtn" onclick="startScan()">スキャン</button>
   </div>
 
@@ -167,8 +167,8 @@ async function startScan() {
   const url = document.getElementById('urlInput').value.trim();
   if (!url) { alert('URLを入力してください'); return; }
 
-  if (!url.includes('sp.jra.jp')) {
-    alert('sp.jra.jp のURLを入力してください');
+  if (!url.includes('jra.jp') && !url.includes('jra.go.jp')) {
+    alert('JRAのレースURLを入力してください');
     return;
   }
 
