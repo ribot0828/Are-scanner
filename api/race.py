@@ -213,7 +213,7 @@ def scrape_race(url):
                 f3_val = 0.0
                 f3_div = col.find("div", class_="f3")
                 if f3_div:
-                    f3_m = re.search(r"([\d.]+)", f3_div.get_text())
+                    f3_m = re.search(r"(\d{2,}\.\d)", f3_div.get_text())
                     f3_val = float(f3_m.group(1)) if f3_m else 0.0
 
                 field_size = 0
