@@ -118,7 +118,7 @@ javascript:(()=>{
       const pr=past[0];
       if(pr.isJRA&&pr.sf==='ダ'&&pr.dist>0&&pr.dist<curDist&&pr.f3>0&&pr.fs>0&&pr.lc>0){
         const th=pr.fs-C.backCount+1;
-        if(th>=1&&pr.lc>=th&&pr.fp>0&&pr.fp<=pr.lc)hitD=true;
+        if(th>=1&&pr.lc>=th&&pr.fp>0&&pr.fp<pr.lc)hitD=true;
       }
     }
 
